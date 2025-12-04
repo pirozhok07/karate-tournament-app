@@ -1038,3 +1038,699 @@ http://localhost:5000
 ```
 
 Приложение готово к использованию! Все функции работают без использования удаленного before_first_request.
+
+
+
+
+🚀 ПЕРВЫЙ ВАРИАНТ КОДА app.py (с исправлением before_first_request)
+
+Вот полный код первого варианта с исправлением:
+
+```python
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask_wtf import FlaskForm
+from wtforms import FileField, SubmitField, StringField, DateField, FloatField, IntegerField
+from wtforms.validators import DataRequired
+from werkzeug.utils import secure_filename
+import os
+import json
+from datetime import datetime
+
+from config import Config
+from database import db
+from models import Athlete, Category, Competition, Score
+from utils.excel_handler import import_athletes_from_excel, export_results_to_excel
+from utils.draw_generator import categorize_athletes, generate_draw
+from utils.pdf_reporter import generate_results_pdf
+
+app = Flask(__name__)
+app.config.from_object(Config)
+db.init_app(app)
+
+# Флаг инициализации
+app_initialized = False
+
+@app.before_request
+def initialize_on_first_request():
+    """Инициализация при первом запросе"""
+    global app_initialized
+    
+    if not app_initialized:
+        # Создание таблиц в базе данных
+        with app.app_context():
+            db.create_all()
+            
+            # Создание папки для загрузок
+            uploads_dir = app.config['UPLOAD_FOLDER']
+            os.makedirs(uploads_dir, exist_ok=True)
+            print(f"✅ Приложение инициализировано: создана папка {uploads_dir}")
+        
+        app_initialized = True
+
+# Формы
+class UploadForm(FlaskForm):
+    excel_file = FileField('Excel файл', validators=[DataRequired()])
+    submit = SubmitField('Загрузить')
+
+class CategoryForm(FlaskForm):
+    name = StringField('Название категории', validators=[DataRequired()])
+    min_age = IntegerField('Минимальный возраст')
+    max_age = IntegerField('Максимальный возраст')
+    min_weight = FloatField('Минимальный вес')
+    max_weight = FloatField('Максимальный вес')
+    gender = StringField('Пол (М/Ж)')
+    submit = SubmitField('Создать категорию')
+
+class CompetitionForm(FlaskForm):
+    name = StringField('Название соревнования', validators=[DataRequired()])
+    date = DateField('Дата', validators=[DataRequired()])
+    location = StringField('Место проведения')
+    submit = SubmitField('Создать')
+
+# Вспомогательные функции
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+# Маршруты
+@app.route('/')
+def index():
+    competitions = Competition.query.all()
+    athletes_count = Athlete.query.count()
+    active_competitions = Competition.query.filter_by(status='active').count()
+    
+    return render_template('index.html', 
+                         competitions=competitions,
+                         athletes_count=athletes_count,
+                         active_competitions=active_competitions)
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_athletes():
+    form = UploadForm()
+    if form.validate_on_submit():
+        if 'excel_file' not in request.files:
+            flash('Файл не выбран')
+            return redirect(request.url)
+        
+        file = request.files['excel_file']
+        if file.filename == '':
+            flash('Файл не выбран')
+            return redirect(request.url)
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            try:
+                athletes = import_athletes_from_excel(filepath)
+                for athlete in athletes:
+                    db.session.add(athlete)
+                db.session.commit()
+                flash(f'Успешно загружено {len(athletes)} спортсменов')
+                return redirect(url_for('manage_categories'))
+            except Exception as e:
+                flash(f'Ошибка: {str(e)}')
+    
+    return render_template('upload.html', form=form)
+
+@app.route('/categories', methods=['GET', 'POST'])
+def manage_categories():
+    form = CategoryForm()
+    if form.validate_on_submit():
+        category = Category(
+            name=form.name.data,
+            min_age=form.min_age.data,
+            max_age=form.max_age.data,
+            min_weight=form.min_weight.data,
+            max_weight=form.max_weight.data,
+            gender=form.gender.data
+        )
+        db.session.add(category)
+        db.session.commit()
+        flash('Категория создана')
+        return redirect(url_for('manage_categories'))
+    
+    categories = Category.query.all()
+    athletes = Athlete.query.all()
+    
+    # Автоматическое распределение
+    categorized = categorize_athletes(athletes, categories)
+    
+    return render_template('categories.html', 
+                         form=form, 
+                         categories=categories, 
+                         athletes=athletes,
+                         categorized=categorized)
+
+@app.route('/create_competition', methods=['GET', 'POST'])
+def create_competition():
+    form = CompetitionForm()
+    if form.validate_on_submit():
+        competition = Competition(
+            name=form.name.data,
+            date=form.date.data,
+            location=form.location.data,
+            status='pending'
+        )
+        db.session.add(competition)
+        db.session.commit()
+        
+        # Создание сетки
+        categories = Category.query.all()
+        athletes = Athlete.query.all()
+        categorized = categorize_athletes(athletes, categories)
+        draw = generate_draw(categorized)
+        
+        # Сохранение сетки
+        competition.draw_data = json.dumps(draw)
+        db.session.commit()
+        
+        flash('Соревнование создано')
+        return redirect(url_for('view_competition', id=competition.id))
+    
+    return render_template('create_competition.html', form=form)
+
+@app.route('/competition/<int:id>')
+def view_competition(id):
+    competition = Competition.query.get_or_404(id)
+    draw = json.loads(competition.draw_data) if competition.draw_data else {}
+    
+    # Получение результатов
+    scores = Score.query.filter_by(competition_id=id).all()
+    
+    return render_template('competition.html', 
+                         competition=competition, 
+                         draw=draw,
+                         scores=scores)
+
+@app.route('/enter_scores', methods=['POST'])
+def enter_scores():
+    data = request.json
+    athlete_id = data['athlete_id']
+    competition_id = data['competition_id']
+    round_number = data['round_number']
+    scores = data['scores']
+    
+    # Поиск существующей записи
+    score = Score.query.filter_by(
+        athlete_id=athlete_id,
+        competition_id=competition_id,
+        round_number=round_number
+    ).first()
+    
+    if not score:
+        score = Score(
+            athlete_id=athlete_id,
+            competition_id=competition_id,
+            round_number=round_number
+        )
+    
+    # Установка оценок
+    score.judge1 = scores[0]
+    score.judge2 = scores[1]
+    score.judge3 = scores[2]
+    score.judge4 = scores[3]
+    score.judge5 = scores[4]
+    score.calculate_scores()
+    
+    db.session.add(score)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'average': score.average})
+
+@app.route('/results/<int:competition_id>')
+def show_results(competition_id):
+    competition = Competition.query.get_or_404(competition_id)
+    
+    # Расчет результатов
+    results = calculate_final_results(competition_id)
+    
+    return render_template('results.html', 
+                         competition=competition,
+                         results=results)
+
+def calculate_final_results(competition_id):
+    """Расчет финальных результатов"""
+    athletes = Athlete.query.all()
+    results = []
+    
+    for athlete in athletes:
+        scores = Score.query.filter_by(
+            competition_id=competition_id,
+            athlete_id=athlete.id
+        ).order_by(Score.round_number).all()
+        
+        if scores:
+            round1 = scores[0].average if len(scores) > 0 else None
+            round2 = scores[1].average if len(scores) > 1 else None
+            round3 = scores[2].average if len(scores) > 2 else None
+            
+            # Сумма лучших двух раундов
+            valid_scores = [s for s in [round1, round2, round3] if s is not None]
+            if len(valid_scores) >= 2:
+                valid_scores.sort(reverse=True)
+                total = sum(valid_scores[:2])
+                average = total / 2
+            else:
+                total = sum(valid_scores) if valid_scores else 0
+                average = total / len(valid_scores) if valid_scores else 0
+            
+            results.append({
+                'athlete_id': athlete.id,
+                'first_name': athlete.first_name,
+                'last_name': athlete.last_name,
+                'club': athlete.club,
+                'category': athlete.category.name if athlete.category else 'Без категории',
+                'round1': round1,
+                'round2': round2,
+                'round3': round3,
+                'total': total,
+                'average': average
+            })
+    
+    # Сортировка по среднему баллу
+    results.sort(key=lambda x: x['average'], reverse=True)
+    
+    # Присвоение мест
+    for i, result in enumerate(results):
+        result['place'] = i + 1
+    
+    return results
+
+@app.route('/export/excel/<int:competition_id>')
+def export_excel(competition_id):
+    results = calculate_final_results(competition_id)
+    competition = Competition.query.get(competition_id)
+    
+    filename = f"results_{competition.name.replace(' ', '_')}.xlsx"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
+    export_results_to_excel(results, filepath)
+    
+    return send_file(filepath, as_attachment=True)
+
+@app.route('/export/pdf/<int:competition_id>')
+def export_pdf(competition_id):
+    results = calculate_final_results(competition_id)
+    competition = Competition.query.get(competition_id)
+    
+    filename = f"protocol_{competition.name.replace(' ', '_')}.pdf"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
+    competition_info = {
+        'name': competition.name,
+        'date': competition.date.strftime('%d.%m.%Y'),
+        'location': competition.location
+    }
+    
+    generate_results_pdf(results, competition_info, filepath)
+    
+    return send_file(filepath, as_attachment=True)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+
+📁 СОЗДАЙТЕ НЕОБХОДИМЫЕ ФАЙЛЫ:
+
+1. templates/index.html
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система проведения соревнований</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .nav-link {
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Навигация -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 rounded">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="{{ url_for('index') }}">
+                    🏆 Система соревнований
+                </a>
+                <div class="navbar-nav">
+                    <a class="nav-link" href="{{ url_for('index') }}">Главная</a>
+                    <a class="nav-link" href="{{ url_for('upload_athletes') }}">Загрузка спортсменов</a>
+                    <a class="nav-link" href="{{ url_for('manage_categories') }}">Категории</a>
+                    <a class="nav-link" href="{{ url_for('create_competition') }}">Создать соревнование</a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Сообщения -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Герой секция -->
+        <div class="hero text-center">
+            <h1 class="display-4">Система проведения соревнований</h1>
+            <p class="lead">Управляйте спортивными соревнованиями: регистрация участников, распределение по категориям, ввод оценок, определение победителей</p>
+            <a href="{{ url_for('create_competition') }}" class="btn btn-light btn-lg mt-3">Создать соревнование</a>
+        </div>
+
+        <!-- Статистика -->
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-card text-center">
+                    <h3>👥 Спортсмены</h3>
+                    <h2 class="text-primary">{{ athletes_count }}</h2>
+                    <p>зарегистрировано в системе</p>
+                    <a href="{{ url_for('upload_athletes') }}" class="btn btn-outline-primary">Добавить спортсменов</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card text-center">
+                    <h3>🏆 Соревнования</h3>
+                    <h2 class="text-success">{{ active_competitions }}</h2>
+                    <p>активных соревнований</p>
+                    <a href="{{ url_for('create_competition') }}" class="btn btn-outline-success">Создать соревнование</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card text-center">
+                    <h3>📊 Система</h3>
+                    <h2 class="text-info">Готова</h2>
+                    <p>к проведению соревнований</p>
+                    <a href="{{ url_for('manage_categories') }}" class="btn btn-outline-info">Настроить категории</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Список соревнований -->
+        <div class="row mt-5">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">Созданные соревнования</h4>
+                    </div>
+                    <div class="card-body">
+                        {% if competitions %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Название</th>
+                                            <th>Дата</th>
+                                            <th>Место</th>
+                                            <th>Статус</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for competition in competitions %}
+                                        <tr>
+                                            <td>{{ competition.name }}</td>
+                                            <td>{{ competition.date.strftime('%d.%m.%Y') }}</td>
+                                            <td>{{ competition.location or '-' }}</td>
+                                            <td>
+                                                {% if competition.status == 'pending' %}
+                                                    <span class="badge bg-warning">Ожидание</span>
+                                                {% elif competition.status == 'active' %}
+                                                    <span class="badge bg-success">Активно</span>
+                                                {% elif competition.status == 'completed' %}
+                                                    <span class="badge bg-secondary">Завершено</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('view_competition', id=competition.id) }}" 
+                                                   class="btn btn-sm btn-primary">Просмотр</a>
+                                                <a href="{{ url_for('show_results', competition_id=competition.id) }}" 
+                                                   class="btn btn-sm btn-info">Результаты</a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <h5>Пока нет созданных соревнований</h5>
+                                <p class="text-muted">Создайте свое первое соревнование</p>
+                                <a href="{{ url_for('create_competition') }}" class="btn btn-primary">Создать соревнование</a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Быстрые действия -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="mb-0">Быстрые действия</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <a href="{{ url_for('upload_athletes') }}" class="btn btn-primary w-100 mb-2">
+                                    📤 Загрузить спортсменов
+                                </a>
+                            </div>
+                            <div class="col-md-3">
+                                <a href="{{ url_for('manage_categories') }}" class="btn btn-info w-100 mb-2">
+                                    🏷️ Управление категориями
+                                </a>
+                            </div>
+                            <div class="col-md-3">
+                                <a href="{{ url_for('create_competition') }}" class="btn btn-success w-100 mb-2">
+                                    🏆 Создать соревнование
+                                </a>
+                            </div>
+                            <div class="col-md-3">
+                                {% if competitions %}
+                                    <a href="{{ url_for('view_competition', id=competitions[0].id) }}" class="btn btn-warning w-100 mb-2">
+                                        📝 Ввести оценки
+                                    </a>
+                                {% else %}
+                                    <button class="btn btn-warning w-100 mb-2" disabled>
+                                        📝 Ввести оценки
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Футер -->
+        <footer class="mt-5 pt-4 border-top text-center text-muted">
+            <p>Система проведения соревнований © 2024</p>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+```
+
+2. templates/upload.html
+
+```html
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Загрузка спортсменов из Excel файла</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.excel_file.label }}</label>
+                        {{ form.excel_file(class="form-control") }}
+                        <div class="form-text">
+                            Поддерживаемые форматы: .xlsx, .xls<br>
+                            Файл должен содержать столбцы: Имя, Фамилия, Дата рождения, Пол, Вес, Рост, Клуб, Номер
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        {{ form.submit(class="btn btn-primary") }}
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Пример файла</h5>
+            </div>
+            <div class="card-body">
+                <p>Создайте Excel файл со следующими столбцами:</p>
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Столбец</th>
+                            <th>Описание</th>
+                            <th>Пример</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Имя</td><td>Имя спортсмена</td><td>Иван</td></tr>
+                        <tr><td>Фамилия</td><td>Фамилия спортсмена</td><td>Петров</td></tr>
+                        <tr><td>Дата рождения</td><td>В формате ГГГГ-ММ-ДД</td><td>2000-05-15</td></tr>
+                        <tr><td>Пол</td><td>М или Ж</td><td>М</td></tr>
+                        <tr><td>Вес</td><td>В килограммах</td><td>75.5</td></tr>
+                        <tr><td>Рост</td><td>В сантиметрах</td><td>180</td></tr>
+                        <tr><td>Клуб</td><td>Название клуба</td><td>Спартак</td></tr>
+                        <tr><td>Номер</td><td>Регистрационный номер</td><td>001</td></tr>
+                    </tbody>
+                </table>
+                
+                <div class="alert alert-info">
+                    <strong>Совет:</strong> Вы можете скачать шаблон Excel файла, заполнить его и загрузить обратно.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+3. templates/base.html
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Система соревнований{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Навигация -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 rounded">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="{{ url_for('index') }}">🏆 Соревнования</a>
+                <div class="navbar-nav">
+                    <a class="nav-link" href="{{ url_for('upload_athletes') }}">Загрузка спортсменов</a>
+                    <a class="nav-link" href="{{ url_for('manage_categories') }}">Категории</a>
+                    <a class="nav-link" href="{{ url_for('create_competition') }}">Создать соревнование</a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Сообщения -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Основной контент -->
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+```
+
+4. requirements.txt
+
+```txt
+Flask==3.0.0
+Flask-SQLAlchemy==3.0.5
+Flask-WTF==1.2.1
+pandas==2.1.0
+openpyxl==3.1.2
+reportlab==4.0.5
+python-dotenv==1.0.0
+XlsxWriter==3.1.2
+```
+
+5. config.py
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'your-secret-key-here'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///competition.db'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    UPLOAD_FOLDER = 'uploads'
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+    ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
+```
+
+6. database.py
+
+```python
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+```
+
+🚀 УСТАНОВКА И ЗАПУСК:
+
+1. Установите зависимости:
+
+```bash
+pip install -r requirements.txt
+```
+
+1. Запустите приложение:
+
+```bash
+python app.py
+```
+
+1. Откройте в браузере:
+
+```
+http://localhost:5000
+```
+
+Приложение будет работать с исправленным before_request вместо удаленного before_first_request.
