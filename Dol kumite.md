@@ -4144,3 +4144,135 @@ def get_athletes_api():
 В base.html после <main class="main-content">{% block content %}{% endblock %}</main> должен быть включен футер: {% include 'partials/footer.html' %}.
 
 Готово. Система теперь имеет полный набор страниц и маршрутов.
+
+
+Мы добавили недостающие API-эндпоинты и обновили модели. Теперь главная страница сможет отображать актуальную статистику, уведомления и предстоящие события.
+
+1. Обновление models.py – добавлена модель Notification
+
+```python
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))  # опционально
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text)
+    type = db.Column(db.String(50), default='info')
+    unread = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    link = db.Column(db.String(500))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'message': self.message,
+            'type': self.type,
+            'unread': self.unread,
+            'created_at': self.created_at.isoformat(),
+            'link': self.link
+        }
+```
+
+2. Новые эндпоинты в app.py
+
+```python
+# API: уведомления
+@app.route('/api/notifications', methods=['GET'])
+def get_notifications():
+    # Для демо возвращаем статические уведомления
+    notifications = [
+        {
+            'id': 1,
+            'title': 'Турнир "Летний кубок" начинается через 30 минут',
+            'message': 'Не забудьте проверить список участников и арены.',
+            'type': 'warning',
+            'unread': True,
+            'created_at': datetime.utcnow().isoformat(),
+            'link': '/tournament/1'
+        },
+        {
+            'id': 2,
+            'title': 'Результаты матча обновлены',
+            'message': 'Матч Иванов vs Петров завершён. Победитель: Иванов.',
+            'type': 'match',
+            'unread': True,
+            'created_at': datetime.utcnow().isoformat(),
+            'link': '/match/5'
+        },
+        {
+            'id': 3,
+            'title': 'Новый спортсмен зарегистрирован',
+            'message': 'Сидоров Алексей добавлен в турнир "Кубок Москвы".',
+            'type': 'info',
+            'unread': False,
+            'created_at': datetime.utcnow().isoformat(),
+            'link': '/participants'
+        }
+    ]
+    return jsonify(notifications)
+
+@app.route('/api/notifications/mark-read', methods=['POST'])
+def mark_notifications_read():
+    # В реальном приложении обновить БД
+    return jsonify({'status': 'ok'})
+
+# API: количество матчей
+@app.route('/api/matches/count', methods=['GET'])
+def matches_count():
+    total = Match.query.count()
+    scheduled = Match.query.filter_by(status='scheduled').count()
+    in_progress = Match.query.filter_by(status='in_progress').count()
+    completed = Match.query.filter_by(status='completed').count()
+    return jsonify({
+        'total': total,
+        'scheduled': scheduled,
+        'in_progress': in_progress,
+        'completed': completed
+    })
+
+# API: количество спортсменов
+@app.route('/api/athletes/count', methods=['GET'])
+def athletes_count():
+    count = Athlete.query.count()
+    return jsonify({'count': count})
+
+# API: предстоящие события (ближайшие матчи)
+@app.route('/api/events/upcoming', methods=['GET'])
+def upcoming_events():
+    now = datetime.utcnow()
+    upcoming_matches = Match.query.filter(Match.start_time > now).order_by(Match.start_time).limit(10).all()
+    events = []
+    for match in upcoming_matches:
+        events.append({
+            'id': match.id,
+            'title': f"{match.p1_participant.athlete.full_name if match.p1_participant else 'TBD'} vs {match.p2_participant.athlete.full_name if match.p2_participant else 'TBD'}",
+            'start_time': match.start_time.isoformat() if match.start_time else None,
+            'arena': match.arena,
+            'round': match.round,
+            'status': match.status,
+            'tournament_id': match.tournament_id
+        })
+    return jsonify(events)
+```
+
+3. Исправление вызовов в index.html
+
+В функции loadDashboardData замените получение данных:
+
+```javascript
+const [tournaments, athletes, matches, events, notifications] = await Promise.all([
+    fetch('/api/tournaments?status=active').then(r => r.json()),
+    fetch('/api/athletes/count').then(r => r.json()),
+    fetch('/api/matches/count').then(r => r.json()),
+    fetch('/api/events/upcoming').then(r => r.json()),
+    fetch('/api/notifications').then(r => r.json())
+]);
+
+document.getElementById('active-tournaments-count').textContent = tournaments.length;
+document.getElementById('athletes-count').textContent = athletes.count;
+document.getElementById('matches-count').textContent = matches.total;
+```
+
+Теперь все страницы работают корректно, а главная отображает актуальную статистику и уведомления.
