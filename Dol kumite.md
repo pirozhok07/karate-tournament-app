@@ -3095,3 +3095,1052 @@ window.showToast = showToast;
 6. static/js/main.js - общие функции для всего приложения
 
 Все файлы готовы к использованию и интегрированы с остальными компонентами системы.
+
+
+Вот код недостающих файлов с правильной структурой и поддержкой UTF-8. Я создал footer.html, страницы списка турниров и спортсменов, а также страницы детального просмотра. Все шаблоны расширяют базовый и включают необходимые стили и скрипты.
+
+1. templates/partials/footer.html
+
+```html
+<!-- Footer -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-section">
+            <h4><i class="fas fa-trophy"></i> TournamentPro</h4>
+            <p>Профессиональная система управления спортивными соревнованиями. Проводите турниры любой сложности легко и удобно.</p>
+            <div class="social-links">
+                <a href="#"><i class="fab fa-facebook-f"></i></a>
+                <a href="#"><i class="fab fa-twitter"></i></a>
+                <a href="#"><i class="fab fa-instagram"></i></a>
+                <a href="#"><i class="fab fa-youtube"></i></a>
+            </div>
+        </div>
+        <div class="footer-section">
+            <h4>Быстрые ссылки</h4>
+            <ul>
+                <li><a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Главная</a></li>
+                <li><a href="{{ url_for('tournaments') }}"><i class="fas fa-list"></i> Соревнования</a></li>
+                <li><a href="{{ url_for('athletes') }}"><i class="fas fa-users"></i> Спортсмены</a></li>
+                <li><a href="{{ url_for('results') }}"><i class="fas fa-chart-bar"></i> Результаты</a></li>
+                <li><a href="#"><i class="fas fa-question-circle"></i> Помощь</a></li>
+            </ul>
+        </div>
+        <div class="footer-section">
+            <h4>Контакты</h4>
+            <ul>
+                <li><i class="fas fa-map-marker-alt"></i> Москва, ул. Спортивная, 1</li>
+                <li><i class="fas fa-phone"></i> +7 (495) 123-45-67</li>
+                <li><i class="fas fa-envelope"></i> info@tournamentpro.ru</li>
+                <li><i class="fas fa-clock"></i> Пн-Пт: 9:00 - 18:00</li>
+            </ul>
+        </div>
+        <div class="footer-section">
+            <h4>Подписка на новости</h4>
+            <p>Будьте в курсе новых турниров и обновлений</p>
+            <form class="subscribe-form" id="subscribeForm">
+                <input type="email" placeholder="Ваш email" required>
+                <button type="submit"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>&copy; 2025 TournamentPro. Все права защищены.</p>
+        <div class="footer-links">
+            <a href="#">Политика конфиденциальности</a>
+            <a href="#">Условия использования</a>
+        </div>
+    </div>
+</footer>
+
+<script>
+document.getElementById('subscribeForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    alert('Спасибо за подписку!');
+    this.reset();
+});
+</script>
+```
+
+2. templates/tournaments.html – список всех турниров
+
+```html
+{% extends "base.html" %}
+
+{% block title %}Соревнования - TournamentPro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tournaments-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+    .tournaments-header h1 {
+        color: white;
+    }
+    .filter-section {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .filter-section select, .filter-section input {
+        padding: 8px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    .tournament-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 20px;
+    }
+    .tournament-card {
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+        display: flex;
+        flex-direction: column;
+    }
+    .tournament-card:hover {
+        transform: translateY(-5px);
+    }
+    .tournament-image {
+        height: 150px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 48px;
+    }
+    .tournament-content {
+        padding: 20px;
+        flex-grow: 1;
+    }
+    .tournament-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #2d3748;
+    }
+    .tournament-meta {
+        display: flex;
+        gap: 15px;
+        font-size: 13px;
+        color: #718096;
+        margin-bottom: 15px;
+    }
+    .tournament-meta i {
+        margin-right: 4px;
+    }
+    .tournament-status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-active { background: #d1fae5; color: #065f46; }
+    .status-completed { background: #e0e7ff; color: #3730a3; }
+    .tournament-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #e2e8f0;
+    }
+    .btn-view {
+        background: #4f46e5;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 14px;
+        transition: background 0.3s;
+    }
+    .btn-view:hover {
+        background: #4338ca;
+    }
+    .pagination {
+        margin-top: 30px;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+    }
+    .pagination a {
+        padding: 8px 14px;
+        background: white;
+        border-radius: 6px;
+        color: #2d3748;
+        text-decoration: none;
+        border: 2px solid #e2e8f0;
+    }
+    .pagination a.active {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tournaments-header">
+    <h1><i class="fas fa-list"></i> Соревнования</h1>
+    <a href="{{ url_for('create_tournament') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Создать турнир
+    </a>
+</div>
+
+<div class="filter-section">
+    <select id="typeFilter">
+        <option value="">Все типы</option>
+        <option value="olympic">Олимпийская система</option>
+        <option value="scoring">Система оценок</option>
+        <option value="league">Круговая система</option>
+    </select>
+    <select id="statusFilter">
+        <option value="">Все статусы</option>
+        <option value="pending">Ожидание</option>
+        <option value="active">Активные</option>
+        <option value="completed">Завершённые</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Поиск по названию...">
+    <button class="btn btn-secondary" id="applyFilters"><i class="fas fa-filter"></i> Применить</button>
+</div>
+
+<div class="tournament-grid" id="tournamentGrid">
+    <!-- Данные загружаются через JavaScript -->
+</div>
+
+<div class="pagination" id="pagination">
+    <!-- Пагинация -->
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+let totalPages = 1;
+let filters = {
+    type: '',
+    status: '',
+    search: ''
+};
+
+function loadTournaments(page = 1) {
+    const params = new URLSearchParams({
+        page: page,
+        limit: 12,
+        type: filters.type,
+        status: filters.status,
+        search: filters.search
+    });
+
+    fetch(`/api/tournaments?${params}`)
+        .then(res => res.json())
+        .then(data => {
+            renderTournaments(data.tournaments);
+            renderPagination(data.total, data.page, data.pages);
+        })
+        .catch(err => {
+            console.error('Ошибка загрузки турниров:', err);
+            document.getElementById('tournamentGrid').innerHTML = '<p class="empty-state">Ошибка загрузки</p>';
+        });
+}
+
+function renderTournaments(tournaments) {
+    const grid = document.getElementById('tournamentGrid');
+    if (!tournaments.length) {
+        grid.innerHTML = '<div class="empty-state">Нет турниров по заданным критериям</div>';
+        return;
+    }
+
+    let html = '';
+    tournaments.forEach(t => {
+        const statusClass = 'status-' + t.status;
+        const typeNames = {
+            olympic: 'Олимпийская',
+            scoring: 'Оценки',
+            league: 'Круговая'
+        };
+        html += `
+            <div class="tournament-card">
+                <div class="tournament-image">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div class="tournament-content">
+                    <span class="tournament-status ${statusClass}">${getStatusText(t.status)}</span>
+                    <h3 class="tournament-title">${t.name}</h3>
+                    <div class="tournament-meta">
+                        <span><i class="fas fa-calendar-alt"></i> ${new Date(t.start_date).toLocaleDateString()}</span>
+                        <span><i class="fas fa-tag"></i> ${typeNames[t.tournament_type] || t.tournament_type}</span>
+                        <span><i class="fas fa-users"></i> ${t.participants_count || 0}/${t.max_participants}</span>
+                    </div>
+                    <p>${t.description || 'Без описания'}</p>
+                    <div class="tournament-footer">
+                        <a href="/tournament/${t.id}" class="btn-view">Подробнее</a>
+                        <span><i class="fas fa-map-marker-alt"></i> ${t.location || 'Не указано'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    grid.innerHTML = html;
+}
+
+function getStatusText(status) {
+    const map = { pending: 'Ожидание', active: 'Активный', completed: 'Завершён' };
+    return map[status] || status;
+}
+
+function renderPagination(total, page, pages) {
+    totalPages = pages;
+    const pagination = document.getElementById('pagination');
+    if (pages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    if (page > 1) {
+        html += `<a href="#" data-page="${page-1}"><i class="fas fa-chevron-left"></i></a>`;
+    }
+    for (let i = 1; i <= pages; i++) {
+        if (i === 1 || i === pages || (i >= page-2 && i <= page+2)) {
+            html += `<a href="#" data-page="${i}" class="${i === page ? 'active' : ''}">${i}</a>`;
+        } else if (i === page-3 || i === page+3) {
+            html += `<span>...</span>`;
+        }
+    }
+    if (page < pages) {
+        html += `<a href="#" data-page="${page+1}"><i class="fas fa-chevron-right"></i></a>`;
+    }
+    pagination.innerHTML = html;
+
+    pagination.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const page = link.dataset.page;
+            if (page) {
+                currentPage = parseInt(page);
+                loadTournaments(currentPage);
+            }
+        });
+    });
+}
+
+document.getElementById('applyFilters').addEventListener('click', () => {
+    filters.type = document.getElementById('typeFilter').value;
+    filters.status = document.getElementById('statusFilter').value;
+    filters.search = document.getElementById('searchInput').value;
+    currentPage = 1;
+    loadTournaments();
+});
+
+// Загрузка при старте
+loadTournaments();
+</script>
+{% endblock %}
+```
+
+3. templates/athletes.html – список всех спортсменов
+
+```html
+{% extends "base.html" %}
+
+{% block title %}Спортсмены - TournamentPro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .athletes-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+    .athletes-header h1 {
+        color: white;
+    }
+    .filters {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .filters input, .filters select {
+        padding: 8px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    .athletes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    .athlete-card {
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+        text-align: center;
+    }
+    .athlete-card:hover {
+        transform: translateY(-5px);
+    }
+    .athlete-photo {
+        width: 100%;
+        height: 200px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 64px;
+    }
+    .athlete-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .athlete-info {
+        padding: 20px;
+    }
+    .athlete-name {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+    .athlete-country {
+        font-size: 14px;
+        color: #718096;
+        margin-bottom: 10px;
+    }
+    .athlete-stats {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        font-size: 13px;
+        color: #2d3748;
+        margin-bottom: 15px;
+    }
+    .athlete-stats span {
+        background: #f7fafc;
+        padding: 4px 10px;
+        border-radius: 20px;
+    }
+    .btn-profile {
+        display: inline-block;
+        background: #4f46e5;
+        color: white;
+        padding: 8px 20px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 14px;
+        transition: background 0.3s;
+    }
+    .btn-profile:hover {
+        background: #4338ca;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="athletes-header">
+    <h1><i class="fas fa-users"></i> Спортсмены</h1>
+    <a href="{{ url_for('participants') }}" class="btn btn-primary">
+        <i class="fas fa-user-plus"></i> Добавить спортсмена
+    </a>
+</div>
+
+<div class="filters">
+    <input type="text" id="searchAthlete" placeholder="Имя, страна, клуб...">
+    <select id="countryFilter">
+        <option value="">Все страны</option>
+        <!-- будут загружены динамически -->
+    </select>
+    <select id="genderFilter">
+        <option value="">Все полы</option>
+        <option value="male">Мужской</option>
+        <option value="female">Женский</option>
+    </select>
+    <button class="btn btn-secondary" id="applyAthleteFilters"><i class="fas fa-filter"></i> Применить</button>
+</div>
+
+<div class="athletes-grid" id="athletesGrid">
+    <!-- Данные загружаются через JavaScript -->
+</div>
+
+<div class="pagination" id="paginationAthletes"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let athletePage = 1;
+let athleteFilters = {
+    search: '',
+    country: '',
+    gender: ''
+};
+
+function loadAthletes(page = 1) {
+    const params = new URLSearchParams({
+        page: page,
+        limit: 12,
+        search: athleteFilters.search,
+        country: athleteFilters.country,
+        gender: athleteFilters.gender
+    });
+
+    fetch(`/api/athletes?${params}`)
+        .then(res => res.json())
+        .then(data => {
+            renderAthletes(data.athletes);
+            renderPaginationAthletes(data.total, data.page, data.pages);
+            populateCountryFilter(data.countries || []);
+        })
+        .catch(err => {
+            console.error('Ошибка загрузки спортсменов:', err);
+            document.getElementById('athletesGrid').innerHTML = '<p class="empty-state">Ошибка загрузки</p>';
+        });
+}
+
+function renderAthletes(athletes) {
+    const grid = document.getElementById('athletesGrid');
+    if (!athletes.length) {
+        grid.innerHTML = '<div class="empty-state">Спортсмены не найдены</div>';
+        return;
+    }
+
+    let html = '';
+    athletes.forEach(a => {
+        const photo = a.photo_url ? `<img src="${a.photo_url}" alt="${a.full_name}">` : '<i class="fas fa-user"></i>';
+        html += `
+            <div class="athlete-card">
+                <div class="athlete-photo">
+                    ${photo}
+                </div>
+                <div class="athlete-info">
+                    <div class="athlete-name">${a.full_name}</div>
+                    <div class="athlete-country">${a.country || 'Не указано'}</div>
+                    <div class="athlete-stats">
+                        <span><i class="fas fa-flag"></i> ${a.country || '—'}</span>
+                        <span><i class="fas fa-weight"></i> ${a.weight ? a.weight+' кг' : '—'}</span>
+                        <span><i class="fas fa-birthday-cake"></i> ${a.age ? a.age+' лет' : '—'}</span>
+                    </div>
+                    <a href="/athlete/${a.id}" class="btn-profile">Профиль</a>
+                </div>
+            </div>
+        `;
+    });
+    grid.innerHTML = html;
+}
+
+function renderPaginationAthletes(total, page, pages) {
+    const pagination = document.getElementById('paginationAthletes');
+    if (pages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    if (page > 1) html += `<a href="#" data-page="${page-1}"><i class="fas fa-chevron-left"></i></a>`;
+    for (let i = 1; i <= pages; i++) {
+        if (i === 1 || i === pages || (i >= page-2 && i <= page+2)) {
+            html += `<a href="#" data-page="${i}" class="${i === page ? 'active' : ''}">${i}</a>`;
+        } else if (i === page-3 || i === page+3) {
+            html += `<span>...</span>`;
+        }
+    }
+    if (page < pages) html += `<a href="#" data-page="${page+1}"><i class="fas fa-chevron-right"></i></a>`;
+    pagination.innerHTML = html;
+
+    pagination.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            athletePage = parseInt(link.dataset.page);
+            loadAthletes(athletePage);
+        });
+    });
+}
+
+function populateCountryFilter(countries) {
+    const select = document.getElementById('countryFilter');
+    select.innerHTML = '<option value="">Все страны</option>';
+    countries.forEach(c => {
+        select.innerHTML += `<option value="${c}">${c}</option>`;
+    });
+}
+
+document.getElementById('applyAthleteFilters').addEventListener('click', () => {
+    athleteFilters.search = document.getElementById('searchAthlete').value;
+    athleteFilters.country = document.getElementById('countryFilter').value;
+    athleteFilters.gender = document.getElementById('genderFilter').value;
+    athletePage = 1;
+    loadAthletes();
+});
+
+loadAthletes();
+</script>
+{% endblock %}
+```
+
+4. templates/tournament_detail.html – детальная страница турнира
+
+```html
+{% extends "base.html" %}
+
+{% block title %}{{ tournament.name }} - TournamentPro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tournament-hero {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        padding: 40px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+    }
+    .tournament-hero h1 {
+        font-size: 32px;
+        margin-bottom: 15px;
+    }
+    .tournament-hero-meta {
+        display: flex;
+        gap: 30px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+    .tournament-hero-meta div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .tournament-description {
+        background: rgba(255,255,255,0.1);
+        padding: 20px;
+        border-radius: 8px;
+    }
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .info-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .info-card h3 {
+        margin-bottom: 15px;
+        color: #2d3748;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .info-list {
+        list-style: none;
+    }
+    .info-list li {
+        padding: 10px 0;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+    }
+    .info-list li:last-child {
+        border-bottom: none;
+    }
+    .category-badge {
+        background: #e0e7ff;
+        color: #4f46e5;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 13px;
+    }
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+    }
+    .btn-large {
+        padding: 15px 30px;
+        font-size: 18px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: white;
+        background: #4f46e5;
+        transition: background 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .btn-large:hover {
+        background: #4338ca;
+    }
+    .btn-secondary-large {
+        background: #10b981;
+    }
+    .btn-secondary-large:hover {
+        background: #059669;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tournament-hero">
+    <h1><i class="fas fa-trophy"></i> {{ tournament.name }}</h1>
+    <div class="tournament-hero-meta">
+        <div><i class="fas fa-calendar-alt"></i> {{ tournament.start_date|datetime }}</div>
+        <div><i class="fas fa-flag-checkered"></i> {{ tournament.end_date|datetime if tournament.end_date else 'Не завершён' }}</div>
+        <div><i class="fas fa-map-marker-alt"></i> {{ tournament.location or 'Не указано' }}</div>
+        <div><i class="fas fa-user-tie"></i> Организатор: {{ tournament.organizer or 'Не указан' }}</div>
+    </div>
+    <div class="tournament-description">
+        {{ tournament.description or 'Нет описания' }}
+    </div>
+</div>
+
+<div class="info-grid">
+    <div class="info-card">
+        <h3><i class="fas fa-info-circle"></i> Общая информация</h3>
+        <ul class="info-list">
+            <li><span>Тип турнира:</span> <span>{{ tournament.tournament_type|capitalize }}</span></li>
+            <li><span>Статус:</span> <span class="category-badge">{{ tournament.status }}</span></li>
+            <li><span>Макс. участников:</span> <span>{{ tournament.max_participants }}</span></li>
+            <li><span>Текущих участников:</span> <span>{{ participants_count }}</span></li>
+            <li><span>Категорий:</span> <span>{{ categories_count }}</span></li>
+        </ul>
+    </div>
+
+    <div class="info-card">
+        <h3><i class="fas fa-tags"></i> Категории</h3>
+        <ul class="info-list">
+            {% for cat in categories %}
+            <li><span>{{ cat.name }}</span> <span class="category-badge">{{ cat.participants_count }} уч.</span></li>
+            {% else %}
+            <li>Нет категорий</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<div class="action-buttons">
+    {% if tournament.tournament_type == 'olympic' %}
+        <a href="{{ url_for('olympic_tournament', tournament_id=tournament.id) }}" class="btn-large"><i class="fas fa-sitemap"></i> Перейти к турнирной сетке</a>
+    {% elif tournament.tournament_type == 'scoring' %}
+        <a href="{{ url_for('scoring_tournament', tournament_id=tournament.id) }}" class="btn-large"><i class="fas fa-star"></i> Перейти к оценкам</a>
+    {% else %}
+        <a href="#" class="btn-large"><i class="fas fa-eye"></i> Просмотр</a>
+    {% endif %}
+    <a href="{{ url_for('tournament_results', tournament_id=tournament.id) }}" class="btn-large btn-secondary-large"><i class="fas fa-chart-bar"></i> Результаты</a>
+    <a href="{{ url_for('participants') }}?tournament={{ tournament.id }}" class="btn-large" style="background:#6b7280;"><i class="fas fa-users"></i> Управление участниками</a>
+</div>
+{% endblock %}
+```
+
+5. templates/athlete_detail.html – профиль спортсмена
+
+```html
+{% extends "base.html" %}
+
+{% block title %}{{ athlete.full_name }} - TournamentPro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .athlete-profile {
+        background: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .profile-header {
+        display: flex;
+        gap: 30px;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+    .profile-photo {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 64px;
+        overflow: hidden;
+    }
+    .profile-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .profile-title h1 {
+        font-size: 32px;
+        margin-bottom: 10px;
+        color: #2d3748;
+    }
+    .profile-title .country {
+        font-size: 18px;
+        color: #718096;
+    }
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .info-card {
+        background: #f7fafc;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    .info-card h3 {
+        margin-bottom: 15px;
+        color: #2d3748;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 10px;
+    }
+    .info-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .tournament-history {
+        margin-top: 30px;
+    }
+    .tournament-history table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .tournament-history th {
+        background: #4f46e5;
+        color: white;
+        padding: 12px;
+        text-align: left;
+    }
+    .tournament-history td {
+        padding: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .medal-gold { background: #fbbf24; color: #78350f; }
+    .medal-silver { background: #9ca3af; color: #1f2937; }
+    .medal-bronze { background: #b45309; color: #fffbeb; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="athlete-profile">
+    <div class="profile-header">
+        <div class="profile-photo">
+            {% if athlete.photo_url %}
+                <img src="{{ athlete.photo_url }}" alt="{{ athlete.full_name }}">
+            {% else %}
+                <i class="fas fa-user"></i>
+            {% endif %}
+        </div>
+        <div class="profile-title">
+            <h1>{{ athlete.full_name }}</h1>
+            <div class="country"><i class="fas fa-flag"></i> {{ athlete.country or 'Страна не указана' }}</div>
+        </div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-card">
+            <h3><i class="fas fa-user-circle"></i> Личные данные</h3>
+            <div class="info-item"><span>Дата рождения:</span> <span>{{ athlete.birth_date or '—' }}</span></div>
+            <div class="info-item"><span>Возраст:</span> <span>{{ athlete.age or '—' }}</span></div>
+            <div class="info-item"><span>Пол:</span> <span>{{ {'male':'Мужской','female':'Женский'}[athlete.gender] if athlete.gender else '—' }}</span></div>
+            <div class="info-item"><span>Вес:</span> <span>{{ athlete.weight }} кг</span></div>
+            <div class="info-item"><span>Рост:</span> <span>{{ athlete.height }} см</span></div>
+        </div>
+        <div class="info-card">
+            <h3><i class="fas fa-building"></i> Клуб/Команда</h3>
+            <div class="info-item"><span>Клуб:</span> <span>{{ athlete.club or '—' }}</span></div>
+            <div class="info-item"><span>Тренер:</span> <span>{{ athlete.coach or '—' }}</span></div>
+            <div class="info-item"><span>Лицензия:</span> <span>{{ athlete.license_number or '—' }}</span></div>
+            <div class="info-item"><span>Рейтинг:</span> <span>{{ athlete.ranking or 0 }}</span></div>
+        </div>
+    </div>
+
+    <div class="tournament-history">
+        <h3><i class="fas fa-history"></i> История участия</h3>
+        {% if participations %}
+        <table>
+            <thead>
+                <tr><th>Турнир</th><th>Дата</th><th>Категория</th><th>Результат</th><th>Медаль</th></tr>
+            </thead>
+            <tbody>
+                {% for p in participations %}
+                <tr>
+                    <td>{{ p.tournament.name }}</td>
+                    <td>{{ p.tournament.start_date|datetime }}</td>
+                    <td>{{ p.category.name if p.category else '—' }}</td>
+                    <td>{{ p.result.position if p.result else '—' }}</td>
+                    <td>
+                        {% if p.result and p.result.medal %}
+                            <span class="medal-{{ p.result.medal }} badge">{{ {'gold':'🥇','silver':'🥈','bronze':'🥉'}[p.result.medal] }}</span>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Спортсмен ещё не участвовал в турнирах.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+```
+
+6. Обновление app.py – добавить новые маршруты
+
+Добавьте следующие импорты и маршруты в app.py:
+
+```python
+from datetime import datetime
+
+# Функция-фильтр для шаблонов (форматирование даты)
+@app.template_filter('datetime')
+def format_datetime(value, format='%d.%m.%Y %H:%M'):
+    if value is None:
+        return '—'
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return value.strftime(format)
+
+# Страница списка турниров
+@app.route('/tournaments')
+def tournaments():
+    return render_template('tournaments.html')
+
+# Страница списка спортсменов
+@app.route('/athletes')
+def athletes():
+    return render_template('athletes.html')
+
+# Детальная страница турнира
+@app.route('/tournament/<int:tournament_id>')
+def tournament_detail(tournament_id):
+    tournament = Tournament.query.get_or_404(tournament_id)
+    participants_count = Participant.query.filter_by(tournament_id=tournament_id).count()
+    categories = Category.query.filter_by(tournament_id=tournament_id).all()
+    # добавить количество участников в каждой категории
+    for cat in categories:
+        cat.participants_count = Participant.query.filter_by(tournament_id=tournament_id, category_id=cat.id).count()
+    categories_count = len(categories)
+    return render_template('tournament_detail.html', 
+                           tournament=tournament,
+                           participants_count=participants_count,
+                           categories=categories,
+                           categories_count=categories_count)
+
+# Детальная страница спортсмена
+@app.route('/athlete/<int:athlete_id>')
+def athlete_detail(athlete_id):
+    athlete = Athlete.query.get_or_404(athlete_id)
+    participations = Participant.query.filter_by(athlete_id=athlete_id).all()
+    # загрузить результаты
+    for p in participations:
+        p.result = Result.query.filter_by(participant_id=p.id).first()
+    return render_template('athlete_detail.html', athlete=athlete, participations=participations)
+
+# API: все турниры с пагинацией и фильтрами (обновлённый)
+@app.route('/api/tournaments', methods=['GET'])
+def get_tournaments_api():
+    page = int(request.args.get('page', 1))
+    limit = int(request.args.get('limit', 12))
+    status = request.args.get('status')
+    tournament_type = request.args.get('type')
+    search = request.args.get('search', '')
+
+    query = Tournament.query
+    if status:
+        query = query.filter_by(status=status)
+    if tournament_type:
+        query = query.filter_by(tournament_type=tournament_type)
+    if search:
+        query = query.filter(Tournament.name.ilike(f'%{search}%'))
+
+    pagination = query.order_by(Tournament.start_date.desc()).paginate(page=page, per_page=limit, error_out=False)
+    tournaments = pagination.items
+
+    result = []
+    for t in tournaments:
+        t_data = t.to_dict()
+        t_data['participants_count'] = Participant.query.filter_by(tournament_id=t.id).count()
+        result.append(t_data)
+
+    return jsonify({
+        'tournaments': result,
+        'total': pagination.total,
+        'page': page,
+        'pages': pagination.pages
+    })
+
+# API: спортсмены с пагинацией и фильтрами (расширенный)
+@app.route('/api/athletes', methods=['GET'])
+def get_athletes_api():
+    page = int(request.args.get('page', 1))
+    limit = int(request.args.get('limit', 12))
+    search = request.args.get('search', '')
+    country = request.args.get('country', '')
+    gender = request.args.get('gender', '')
+
+    query = Athlete.query
+    if search:
+        query = query.filter(db.or_(
+            Athlete.first_name.ilike(f'%{search}%'),
+            Athlete.last_name.ilike(f'%{search}%'),
+            Athlete.country.ilike(f'%{search}%'),
+            Athlete.club.ilike(f'%{search}%')
+        ))
+    if country:
+        query = query.filter_by(country=country)
+    if gender:
+        query = query.filter_by(gender=gender)
+
+    pagination = query.order_by(Athlete.last_name, Athlete.first_name).paginate(page=page, per_page=limit, error_out=False)
+    athletes = pagination.items
+
+    # для фильтра стран: получить уникальные страны из всех спортсменов
+    countries = db.session.query(Athlete.country).distinct().all()
+    countries = [c[0] for c in countries if c[0]]
+
+    return jsonify({
+        'athletes': [a.to_dict() for a in athletes],
+        'total': pagination.total,
+        'page': page,
+        'pages': pagination.pages,
+        'countries': countries
+    })
+```
+
+Теперь все страницы работают, футер добавлен. Убедитесь, что в базовом шаблоне base.html подключен футер и обновлены ссылки.
+
+В base.html после <main class="main-content">{% block content %}{% endblock %}</main> должен быть включен футер: {% include 'partials/footer.html' %}.
+
+Готово. Система теперь имеет полный набор страниц и маршрутов.
