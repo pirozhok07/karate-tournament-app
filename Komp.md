@@ -767,3 +767,358 @@ static/script.js – пустой, можно добавить интеракт�
 · PDF формируется очень просто – для полноценного отчёта нужно добавить больше деталей.
 
 Приложение готово к использованию и полностью соответствует поставленной задаче.
+
+
+
+Ниже представлены коды всех недостающих шаблонов, включая index.html, а также дополнительные пояснения по интеграции.
+
+---
+
+8. Недостающие шаблоны
+
+templates/index.html – главная страница
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Добро пожаловать в систему управления соревнованиями по карате</h1>
+<p>Здесь вы можете создавать соревнования, добавлять спортсменок, формировать категории и управлять турнирной сеткой.</p>
+{% if current_user.is_authenticated %}
+    <p>Перейдите к <a href="{{ url_for('competitions') }}">списку соревнований</a> или <a href="{{ url_for('athletes_list') }}">спортсменам</a>.</p>
+{% else %}
+    <p>Для работы с системой необходимо <a href="{{ url_for('login') }}">войти</a> или <a href="{{ url_for('register') }}">зарегистрироваться</a>.</p>
+{% endif %}
+{% endblock %}
+```
+
+---
+
+templates/login.html – форма входа
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Вход</h1>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.username.label }}<br>
+        {{ form.username(size=32) }}<br>
+        {% for error in form.username.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.password.label }}<br>
+        {{ form.password(size=32) }}<br>
+        {% for error in form.password.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>{{ form.submit() }}</div>
+</form>
+<p>Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрируйтесь</a></p>
+{% endblock %}
+```
+
+---
+
+templates/register.html – форма регистрации
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Регистрация</h1>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.username.label }}<br>
+        {{ form.username(size=32) }}<br>
+        {% for error in form.username.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.email.label }}<br>
+        {{ form.email(size=32) }}<br>
+        {% for error in form.email.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.password.label }}<br>
+        {{ form.password(size=32) }}<br>
+        {% for error in form.password.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.password2.label }}<br>
+        {{ form.password2(size=32) }}<br>
+        {% for error in form.password2.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>{{ form.submit() }}</div>
+</form>
+<p>Уже зарегистрированы? <a href="{{ url_for('login') }}">Войдите</a></p>
+{% endblock %}
+```
+
+---
+
+templates/competitions.html – список соревнований
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Соревнования</h1>
+<a href="{{ url_for('new_competition') }}">Создать новое соревнование</a>
+<ul>
+    {% for comp in competitions %}
+        <li>
+            <a href="{{ url_for('competition_detail', comp_id=comp.id) }}">{{ comp.name }}</a>
+            – {{ comp.date }}, {{ comp.location }}
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}
+```
+
+---
+
+templates/competition_form.html – форма создания/редактирования соревнования
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.name.label }}<br>
+        {{ form.name(size=64) }}<br>
+        {% for error in form.name.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.date.label }}<br>
+        {{ form.date() }}<br>
+        {% for error in form.date.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.location.label }}<br>
+        {{ form.location(size=64) }}<br>
+        {% for error in form.location.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>{{ form.submit() }}</div>
+</form>
+{% endblock %}
+```
+
+---
+
+templates/category_form.html – форма добавления категории
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Новая категория для соревнования "{{ competition.name }}"</h1>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.name.label }}<br>
+        {{ form.name(size=32) }}<br>
+        {% for error in form.name.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.gender.label }}<br>
+        {{ form.gender() }}<br>
+    </div>
+    <div>
+        {{ form.age_min.label }}<br>
+        {{ form.age_min() }}<br>
+    </div>
+    <div>
+        {{ form.age_max.label }}<br>
+        {{ form.age_max() }}<br>
+    </div>
+    <div>
+        {{ form.weight_min.label }}<br>
+        {{ form.weight_min() }}<br>
+    </div>
+    <div>
+        {{ form.weight_max.label }}<br>
+        {{ form.weight_max() }}<br>
+    </div>
+    <div>{{ form.submit() }}</div>
+</form>
+{% endblock %}
+```
+
+---
+
+templates/athletes.html – список спортсменов и регистрация в категорию
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Спортсмены</h1>
+<a href="{{ url_for('new_athlete') }}">Добавить спортсмена</a>
+
+{% if request.args.get('cat_id') %}
+    {% set cat_id = request.args.get('cat_id')|int %}
+    <p>Выберите спортсмена для регистрации в категории:</p>
+{% endif %}
+
+<ul>
+    {% for athlete in athletes %}
+        <li>
+            {{ athlete.name }} ({{ athlete.club }})
+            {% if request.args.get('cat_id') %}
+                <a href="{{ url_for('register_athlete', cat_id=request.args.get('cat_id'), athlete_id=athlete.id) }}">Зарегистрировать</a>
+            {% endif %}
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}
+```
+
+---
+
+templates/athlete_form.html – форма добавления/редактирования спортсмена
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Добавить спортсмена</h1>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.name.label }}<br>
+        {{ form.name(size=64) }}<br>
+        {% for error in form.name.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.birth_date.label }}<br>
+        {{ form.birth_date() }}<br>
+        {% for error in form.birth_date.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+        {% endfor %}
+    </div>
+    <div>
+        {{ form.gender.label }}<br>
+        {{ form.gender() }}<br>
+    </div>
+    <div>
+        {{ form.club.label }}<br>
+        {{ form.club(size=32) }}<br>
+    </div>
+    <div>
+        {{ form.coach.label }}<br>
+        {{ form.coach(size=32) }}<br>
+    </div>
+    <div>{{ form.submit() }}</div>
+</form>
+{% endblock %}
+```
+
+---
+
+templates/match_form.html – форма ввода результата поединка
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<h1>Результат поединка</h1>
+<p>Категория: {{ match.category.name }}</p>
+<p>Раунд {{ match.round }}, позиция {{ match.position }}</p>
+<p>
+    {% if match.athlete1 %}{{ match.athlete1.name }}{% else %}???{% endif %}
+    vs
+    {% if match.athlete2 %}{{ match.athlete2.name }}{% else %}???{% endif %}
+</p>
+
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.score1.label }} (для {{ match.athlete1.name if match.athlete1 else 'спортсмена 1' }})<br>
+        {{ form.score1(size=10) }}<br>
+    </div>
+    <div>
+        {{ form.score2.label }} (для {{ match.athlete2.name if match.athlete2 else 'спортсмена 2' }})<br>
+        {{ form.score2(size=10) }}<br>
+    </div>
+    <div>{{ form.submit() }}</div>
+</form>
+
+<a href="{{ url_for('category_detail', cat_id=match.category_id) }}">Вернуться к категории</a>
+{% endblock %}
+```
+
+---
+
+9. Полная структура проекта (напоминание)
+
+```
+karate_tournament/
+├── app.py
+├── config.py
+├── models.py
+├── forms.py
+├── requirements.txt
+├── static/
+│   ├── style.css
+│   └── script.js
+└── templates/
+    ├── base.html
+    ├── index.html
+    ├── login.html
+    ├── register.html
+    ├── competitions.html
+    ├── competition_form.html
+    ├── competition_detail.html
+    ├── category_form.html
+    ├── category_detail.html
+    ├── athletes.html
+    ├── athlete_form.html
+    ├── match_form.html
+    └── results.html
+```
+
+---
+
+10. Запуск и использование
+
+1. Убедитесь, что все файлы находятся в правильных папках.
+2. Запустите app.py:
+   ```bash
+   python app.py
+   ```
+3. Откройте браузер по адресу http://127.0.0.1:5000.
+
+---
+
+✅ Заключение
+
+Все недостающие шаблоны предоставлены. Теперь проект полностью готов к работе и включает:
+
+· регистрацию и авторизацию;
+· создание соревнований и категорий;
+· добавление спортсменок;
+· регистрацию спортсменок в категориях;
+· автоматическую генерацию турнирной сетки (олимпийская система);
+· ввод результатов поединков с продвижением победителей;
+· просмотр итоговых результатов по категориям;
+· экспорт результатов в PDF (базовый).
+
+При необходимости вы можете доработать дизайн, добавить валидацию и расширить функционал (например, редактирование/удаление записей). Успешного использования!
