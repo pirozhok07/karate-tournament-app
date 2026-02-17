@@ -721,3 +721,39 @@ document.querySelectorAll('.view-participants').forEach(btn => {
 ```
 
 Теперь кнопка "Участники" корректно открывает список участников категории либо в модальном окне, либо на отдельной странице, с возможностью просмотра, редактирования и удаления.
+
+
+Добавим эндпоинт для получения текущих (live) матчей турнира.
+
+1. Добавить маршрут в app.py
+
+```python
+@app.route('/api/tournaments/<int:tournament_id>/matches/live', methods=['GET'])
+def get_live_matches(tournament_id):
+    # Получаем матчи со статусом 'in_progress'
+    matches = Match.query.filter_by(
+        tournament_id=tournament_id,
+        status='in_progress'
+    ).all()
+    return jsonify([m.to_dict() for m in matches])
+```
+
+2. Использование на фронтенде
+
+Например, на странице турнирной сетки olympic_bracket.html уже есть функция loadLiveMatches, которая использует этот эндпоинт. Убедитесь, что она правильно вызывается (она уже есть в коде выше). Если нет, добавьте:
+
+```javascript
+async function loadLiveMatches() {
+    try {
+        const response = await fetch(`/api/tournaments/${tournamentId}/matches/live`);
+        const matches = await response.json();
+        renderLiveMatches(matches);
+    } catch (error) {
+        console.error('Ошибка загрузки текущих матчей:', error);
+    }
+}
+```
+
+И вызывайте её при загрузке страницы и периодически (например, каждые 30 секунд).
+
+Теперь API для живых матчей готов.
